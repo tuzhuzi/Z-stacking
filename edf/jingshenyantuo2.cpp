@@ -3,28 +3,12 @@
 
 bool jsyt::split(Mat &in, Mat &out)
 {
-	int w = in.cols;
-	int h = in.rows;
 	int min_half_size = MIN_HALF_SIZE;
-	if (w <min_half_size|| h<min_half_size) {
-		std::cout << "get minsize" << std::endl;
-		return 0;
+	if (in.cols > min_half_size&&in.rows > min_half_size) {
+		pyrDown(in, out);
+		return true;
 	}
-		
-	int newh = h / 2;
-	int neww = w / 2;
-	if (newh % 2)
-		newh--;
-	if(neww % 2)
-		neww--;
-	out = Mat::zeros(Size(neww,newh), CV_8U);
-	for (int i = 0; i < newh; i++) {
-		for (int j = 0; j < neww; j++) {
-			out.at<uchar>(i, j) = (in.at<uchar>(2 * i, 2 * j) + in.at<uchar>(2 * i + 1, 2 * j + 1) + in.at<uchar>(2 * i + 1, 2 * j) + in.at<uchar>(2 * i, 2 * j + 1)) / 4;
-		}
-	}
-	return 1;
-
+	return false;
 }
 
 _int64 jsyt::tss(tss_para & pp)
@@ -381,7 +365,6 @@ void jsyt::laplace_method(std::vector<Mat>& matIn,Mat &dst)
 	//imwrite("lut.jpg", lut);
 	//fuse image with lookuotable
 	dst = fuseWithLut(matIn, lut,lap);
-	return dst;
 }
 int jsyt::findmax(Mat &kernel, int size) {
 	CV_Assert(kernel.size() == Size(3, 3));
@@ -548,7 +531,7 @@ void jsyt::island(Mat & in) {
 Mat jsyt::fuseWithLut(std::vector<Mat>& in, Mat &lut,std::vector<Mat>&lap)
 {
 	Mat dst = in[0].clone();
-	Mat clc = Mat::zeros(in[0].size(), CV_32FC1);
+	Mat clc = Mat::zeros(in[0].size(),in[0].type());
 	Mat lutT;
 	int size = in.size();
 	for (int i = 0; i<size; i++) {
@@ -561,9 +544,9 @@ Mat jsyt::fuseWithLut(std::vector<Mat>& in, Mat &lut,std::vector<Mat>&lap)
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
 			if (lut.at<short>(i, j) == 0)
-				dst.at<float>(i, j) = clc.at<float>(i, j) / size;
+				dst.at<Vec3f>(i, j) = clc.at<Vec3f>(i, j) / size;
 			else
-				dst.at<float>)(i, j) = in[lut.at<short>(i, j) - 1].at<float>(i, j);
+				dst.at<Vec3f>(i, j) = in[lut.at<short>(i, j) - 1].at<Vec3f>(i, j);
 		}
 	}
 	return dst;
@@ -732,7 +715,7 @@ Mat jsyt::getlut(std::vector<Mat> &lap)
 			lap[i].convertTo(lap[i], CV_32FC1, 1.0f / 255.0f);
 		}
 	}
-	Mat clc = Mat::zeros(lapT[0].size(), CV_32FC1);
+	Mat clc = Mat::zeros(lap[0].size(), CV_32FC1);
 	for (int i = 0; i < lap.size(); i++) {
 		boxFilter(lap[i], lapT[i], CV_32FC1, Size(5, 5));
 		abs(lapT[i]);
@@ -770,31 +753,27 @@ Mat jsyt::lapPyramin(std::vector<Mat> splitMat, int level)
 	int h0 = splitMat[0].rows;
 	Mat dst = Mat::zeros(Size(w0, h0), CV_32FC1);
 	for (int i = level; i >= 0; i--) {
-		Laplacian(splitMat[i ], splitMat[i ], 0, 3);
+		Laplacian(splitMat[i ], splitMat[i],CV_32F,3);
 		if (i != 0)
-			resize(splitMat[i ], splitMat[i],Size(w0,h0));
+			resize(splitMat[i], splitMat[i], Size(w0, h0));
 		dst += splitMat[i];
 	}
 	return dst;
-		
 }
 
 int jsyt::split(Mat & in, std::vector<Mat>& splitM)
 {
 	int level = 0;
-	splitM[0] = in;
-	int w = in.cols;
-	int h = in.rows;
-	w /= 2, h /= 2;
-
-	while (jsyt::split(splitM[level], splitM[level + 1]))
+	if (in.channels()== 3)
+		cvtColor(in, splitM[0], COLOR_RGB2GRAY);
+	else
+		splitM[0] = in.clone();
+	while (jsyt::split(splitM[level], splitM[level + 1])&&level<splitM.size())
 	{
 		level++;
 	}
 	return level;
 }
-
-	
 
 void jsyt::self_assert(Mat & in, int size)
 {
